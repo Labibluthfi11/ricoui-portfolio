@@ -1,0 +1,105 @@
+---
+title: "Studi Kasus: Company Profile Modern - High Performance dengan Next.js & Laravel"
+publishDate: "2025-12-20"
+description: "Website profil perusahaan modern dengan performa tinggi (SEO Friendly) dan manajemen konten dinamis."
+img: "/assets/works/Company.png"
+tags:
+  - Next Js
+  - Figma
+  - Laravel
+  - Mysql
+featured: true
+link: "https://pt.anselmudaberkarya.my.id/"
+---
+
+Website Company Profile seringkali dianggap sepele: "Yang penting ada info perusahaan." Akibatnya, banyak perusahaan yang masih menggunakan website statis kuno yang sulit diupdate, atau menggunakan template CMS berat yang loadingnya lambat.
+
+Padahal, di era digital, website adalah **Wajah Utama** sebuah bisnis. Jika loadingnya lama, calon klien kabur. Jika tidak muncul di Google (bad SEO), klien tidak akan pernah datang.
+
+Project **Company Profile PT. Ansel Muda Berkarya** ini saya bangun untuk memecahkan masalah tersebut dengan pendekatan modern: **Headless CMS Architecture.**
+
+## The Tech Stack
+
+Saya memisahkan Frontend dan Backend untuk mendapatkan performa maksimal:
+
+* **Figma:** Tahap awal desain UI/UX untuk memastikan *branding* perusahaan terlihat profesional dan pixel-perfect sebelum coding dimulai.
+* **Next.js (Frontend):** Framework React yang saya pilih karena fitur *Server-Side Rendering (SSR)*-nya. Ini kuncinya agar website super cepat dan **SEO Friendly** (mudah dibaca Google).
+* **Laravel (Backend API):** Bertindak sebagai "mesin" pengelola konten. Klien bisa update data tanpa menyentuh kodingan.
+* **MySQL:** Penyimpanan data terstruktur untuk portofolio, tim, dan layanan.
+
+## Tantangan 1: Mengejar SEO & Performa (The Next.js Magic)
+
+Masalah utama website modern berbasis JavaScript (SPA) biasanya adalah SEO. Google bot kadang kesulitan membaca konten yang di-render di browser.
+
+### Solusi: Server-Side Rendering (SSR)
+Dengan Next.js, saya memastikan halaman HTML sudah "matang" saat dikirim dari server ke browser. Ini membuat Google sangat menyukai struktur website ini.
+
+Saya menggunakan fitur `getStaticProps` atau `getServerSideProps` untuk mengambil data dari Backend Laravel sebelum halaman dirender.
+
+```javascript
+// Contoh implementasi di Next.js (Frontend)
+// Mengambil data Services dari API Laravel sebelum halaman dimuat
+
+export async function getServerSideProps() {
+  // Fetch data dari Backend Laravel
+  const res = await fetch('[https://api.anselmudaberkarya.my.id/api/services](https://api.anselmudaberkarya.my.id/api/services)');
+  const services = await res.json();
+
+  // Pass data ke komponen page via props
+  // Google akan melihat HTML yang sudah terisi konten ini, bukan loading spinner.
+  return {
+    props: {
+      services,
+    },
+  }
+}
+
+const ServiceSection = ({ services }) => {
+  return (
+    <div className="grid grid-cols-3 gap-4">
+      {services.map((item) => (
+        <div key={item.id} className="card-service">
+            <h3>{item.title}</h3>
+            <p>{item.description}</p>
+        </div>
+      ))}
+    </div>
+  )
+}
+export default ServiceSection;
+```
+## Tantangan 2: Manajemen Konten Dinamis (The Laravel Power)
+Klien membutuhkan kebebasan untuk menambah **Portofolio Project** dan **Berita Terbaru** kapan saja, tanpa harus menghubungi developer. Website statis HTML biasa tidak bisa melakukan ini.
+
+## Solusi: Custom Rest API
+Saya membangun panel admin sederhana namun powerful menggunakan Laravel. Backend ini menyediakan endpoint API yang dikonsumsi oleh Next.js.
+
+Alih-alih menggunakan CMS jadi (seperti Wordpress) yang seringkali bloated (berat), custom backend ini hanya menyediakan apa yang dibutuhkan saja, sehingga respon server sangat cepat (low latency).
+```javascript
+// Contoh Controller Laravel untuk menyajikan data ke Next.js
+public function index()
+{
+    // Mengambil data services yang aktif, diurutkan terbaru
+    $services = Service::where('is_active', true)
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+    // Return response JSON yang bersih dan ringan
+    return response()->json([
+        'status' => 'success',
+        'data' => $services
+    ], 200);
+}
+```
+## Hasil Akhir
+Hasil kolaborasi antara Next.js dan Laravel ini menghasilkan website yang:
+
+1. Lightning Fast: Loading page perpindahan halaman terasa instan.
+
+2. SEO Optimized: Struktur HTML terbaca sempurna oleh search engine.
+
+3. Easy to Manage: Klien bisa mengupdate konten secara real-time melalui dashboard admin.
+
+Anda dapat melihat hasil live-nya di: https://pt.anselmudaberkarya.my.id/
+
+Proyek ini membuktikan bahwa Company Profile tidak harus membosankan dan lambat. Dengan stack teknologi yang tepat, kita bisa menciptakan identitas digital yang profesional dan berkinerja tinggi.

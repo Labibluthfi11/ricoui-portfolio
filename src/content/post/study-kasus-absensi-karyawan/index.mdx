@@ -1,0 +1,135 @@
+---
+title: "Studi Kasus: Membangun Sistem Absensi Anti-Fake GPS dengan Laravel & Flutter"
+publishDate: "2025-12-12"
+description: "Bagaimana saya menangani validasi lokasi presisi (Geo-fencing) dan keamanan perangkat (Device Locking) untuk mencegah kecurangan absensi."
+img: "/assets/works/absensi-karyawan.png"
+tags:
+  - Laravel
+  - Flutter
+  - Case Study
+  - Backend Security
+featured: false
+---
+
+Membangun aplikasi absensi terdengar sederhana: "User login, klik tombol, data tersimpan." Selesai? **Tentu tidak.**
+
+Dalam implementasi nyata di lapangan, tantangannya bukan pada fitur "klik"-nya, tapi pada **Integritas Data**. Bagaimana kita memastikan karyawan benar-benar berada di kantor? Bagaimana mencegah mereka "titip absen" pakai HP teman? Bagaimana menangani Fake GPS?
+
+Project **Dashboard Absensi Karyawan** ini saya bangun untuk menjawab tantangan tersebut menggunakan kombinasi **Laravel 12** (Backend) dan **Flutter** (Mobile).
+
+## The Tech Stack
+
+Saya memilih teknologi ini dengan alasan performa dan skalabilitas:
+
+* **Flutter (Mobile App):** Single codebase untuk Android/iOS, akses sensor GPS/Hardware yang presisi, dan performa mendekati native.
+* **Laravel 12 (Backend API):** Framework PHP yang robust. Saya menggunakan **Sanctum** untuk otentikasi API token yang aman dan ringan.
+* **MySQL:** Database relasional untuk menyimpan log presensi dan relasi karyawan.
+
+## Tantangan 1: Validasi Lokasi (Geo-Fencing)
+
+Fitur paling krusial adalah membatasi area absen. User hanya boleh absen jika berada dalam radius **50 meter** dari titik koordinat kantor.
+
+### Masalah:
+Jangan pernah percaya validasi di sisi Client (Mobile App). Aplikasi bisa dimodifikasi atau dimanipulasi dengan *Mock Location* (Fake GPS).
+
+### Solusi Saya: Server-Side Validation
+Aplikasi mobile hanya bertugas mengirimkan Latitude & Longitude saat ini. Validasi jarak **wajib** dilakukan di Backend Laravel.
+
+Saya menggunakan rumus **Haversine Formula** untuk menghitung jarak akurat antara dua titik di permukaan bumi.
+
+Berikut snippet logic yang saya implementasikan di Controller Laravel:
+
+```php
+public function checkIn(Request $request)
+{
+    $user = auth()->user();
+    $officeLat = -6.2088; // Contoh Lat Kantor
+    $officeLng = 106.8456; // Contoh Lng Kantor
+    
+    // 1. Hitung jarak user ke kantor (dalam meter)
+    $distance = $this->calculateDistance(
+        $request->latitude, 
+        $request->longitude, 
+        $officeLat, 
+        $officeLng
+    );
+
+    // 2. Validasi Radius (Max 50 Meter)
+    if ($distance > 50) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Anda berada di luar jangkauan kantor! Jarak: ' . round($distance) . 'm'
+        ], 400);
+    }
+
+    // 3. Jika lokasi aman, Lanjut ke validasi device (Tantangan 2)
+    return $this->validateDevice($request, $user);
+}
+
+// Fungsi Rumus Haversine
+private function calculateDistance($lat1, $lon1, $lat2, $lon2) {
+    $earthRadius = 6371000;
+    
+    $dLat = deg2rad($lat2 - $lat1);
+    $dLon = deg2rad($lon2 - $lon1);
+    
+    $a = sin($dLat/2) * sin($dLat/2) +
+         cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+         sin($dLon/2) * sin($dLon/2);
+         
+    $c = 2 * atan2(sqrt($a), sqrt(1-$a));
+    return $earthRadius * $c;
+}
+````
+
+## Tantangan 2: Keamanan Perangkat (Device Locking)
+
+Masalah kedua yang sering terjadi adalah **"Titip Absen"**. Karyawan A tidak masuk, tapi memberikan akunnya ke Karyawan B untuk diabsenkan dari HP Karyawan B di kantor.
+
+### Masalah:
+
+Geo-fencing lolos karena Karyawan B memang ada di kantor, tapi integritas data tetap rusak karena bukan orang yang bersangkutan yang melakukan absensi.
+
+### Solusi Saya: Hardware ID Binding
+
+Setiap akun karyawan dikunci (locked) hanya bisa melakukan absensi dari **satu perangkat terdaftar**.
+
+1.  **Di Sisi Flutter:** Saat login pertama kali atau saat absen, aplikasi mengirimkan `Unique Device ID` (UUID/Android ID) dari device tersebut.
+2.  **Di Sisi Laravel:** Backend mengecek apakah ID yang dikirim cocok dengan `registered_device_id` di database user.
+
+
+```php
+// Lanjutan logic validasi device
+private function validateDevice(Request $request, $user)
+{
+    // Cek apakah user sudah punya device terdaftar
+    if (!$user->device_id) {
+        // Jika belum, daftarkan device ini sebagai device sah
+        $user->update(['device_id' => $request->device_id]);
+    } 
+    // Jika sudah punya, cocokan ID-nya
+    else if ($user->device_id !== $request->device_id) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Device tidak dikenali. Silakan gunakan HP Anda yang terdaftar.'
+        ], 403);
+    }
+
+    // Jika lolos semua validasi (Lokasi & Device), simpan data absensi
+    Attendance::create([
+        'user_id' => $user->id,
+        'check_in_time' => now(),
+        'location_lat' => $request->latitude,
+        'location_lng' => $request->longitude,
+        'device_id' => $request->device_id
+    ]);
+
+    return response()->json(['status' => 'success', 'message' => 'Absensi Berhasil!']);
+}
+```
+
+## Kesimpulan
+
+Dengan menggabungkan **Haversine Formula** untuk validasi radius dan **Device Locking** untuk validasi perangkat keras, sistem ini berhasil meminimalisir kecurangan absensi hingga 95%. Sisa 5% adalah faktor human error atau anomali sinyal GPS yang memang diluar kendali software.
+
+Penggunaan **Laravel Sanctum** dan **Flutter** terbukti menjadi stack yang efisien untuk menangani logic yang membutuhkan presisi tinggi seperti ini.

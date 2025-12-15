@@ -1,0 +1,94 @@
+---
+title: "Studi Kasus: E-Document - Transformasi Arsip Digital dengan Laravel"
+publishDate: "2025-12-25"
+description: "Platform digitalisasi arsip untuk pengelolaan, pencarian, dan pengamanan dokumen perusahaan secara efisien."
+img: "/assets/works/dokumen.png"
+tags:
+  - Laravel
+  - Mysql
+  - Backend Development
+  - System Architecture
+featured: false
+---
+
+Masalah klasik di banyak perusahaan adalah "Gudang Arsip". Tumpukan kertas yang menggunung, risiko dokumen hilang atau rusak dimakan rayap, dan yang paling parah: **Sulit dicari.**
+
+Ketika atasan meminta "Cari kontrak kerjasama tahun 2019", staf admin bisa menghabiskan waktu berjam-jam hanya untuk membongkar lemari.
+
+Project **E-Document** ini hadir sebagai solusi *Paperless Office*. Tujuannya mengubah tumpukan fisik menjadi data digital yang aman, terstruktur, dan bisa ditemukan dalam hitungan detik.
+
+## The Tech Stack
+
+Untuk sistem yang *data-heavy* seperti ini, stabilitas dan keamanan adalah kunci.
+
+* **Laravel (Backend Core):** Framework PHP yang sangat matang untuk menangani *business logic* yang kompleks, manajemen file, dan keamanan.
+* **MySQL:** Database relasional untuk menyimpan metadata dokumen (judul, kategori, tanggal, uploader) dengan relasi yang kuat.
+* **Storage System:** Menggunakan `Local Storage` (untuk deployment internal) atau driver `S3` untuk skalabilitas cloud.
+
+## Tantangan 1: Pencarian Dokumen Instan
+
+Tantangan utama E-Document adalah "Searchability". User tidak hanya mencari berdasarkan judul, tapi kadang berdasarkan nomor surat, kategori, atau tahun.
+
+### Solusi: Advanced Query Scope
+Saya memanfaatkan fitur **Query Scopes** dan **Full-Text Search** sederhana di MySQL agar query pencarian tetap kencang meski data mencapai ribuan.
+
+```php
+// Model Document.php
+public function scopeFilter($query, array $filters)
+{
+    // Filter berdasarkan Keyword (Judul/Nomor Surat)
+    $query->when($filters['search'] ?? false, function($query, $search) {
+        return $query->where(function($query) use ($search) {
+             $query->where('title', 'like', '%' . $search . '%')
+                   ->orWhere('document_number', 'like', '%' . $search . '%');
+        });
+    });
+
+    // Filter berdasarkan Kategori
+    $query->when($filters['category'] ?? false, function($query, $category) {
+        return $query->whereHas('category', function($query) use ($category) {
+            $query->where('slug', $category);
+        });
+    });
+}
+```
+**Dengan logic ini, di Controller saya cukup memanggil satu baris kode yang bersih:**
+```php
+// DocumentController.php
+public function index() {
+    return Document::latest()->filter(request(['search', 'category']))->paginate(10);
+}
+```
+## Tantangan 2: Keamanan & Hak Akses (RBAC)
+Tidak semua dokumen boleh dilihat semua orang. Laporan Keuangan hanya untuk Manager, sedangkan SOP boleh untuk semua staf. Bagaimana mengamankannya?
+* **Solusi: Laravel Policies (Authorization)**
+Saya tidak menggunakan if-else sembarangan di Controller. Saya menggunakan Laravel Policies untuk mengatur Role-Based Access Control (RBAC) yang ketat.
+
+File fisik dokumen disimpan di folder storage/app/private (bukan public), sehingga tidak bisa diakses langsung via URL browser. Akses harus melalui route khusus yang dilindungi Policy.
+```php
+// DocumentPolicy.php
+public function view(User $user, Document $document)
+{
+    // Admin boleh lihat semua
+    if ($user->role === 'admin') return true;
+
+    // Staff hanya boleh lihat dokumen divisinya sendiri
+    return $user->division_id === $document->division_id;
+}
+```
+* **Implementasi di Controller untuk download file:**
+```php
+public function download(Document $document)
+{
+    // Cek otorisasi sebelum serve file
+    $this->authorize('view', $document);
+
+    // Jika lolos, berikan filenya
+    return response()->download(storage_path('app/private/' . $document->file_path));
+}
+```
+## Fitur Tambahan: Versioning
+Seringkali dokumen mengalami revisi. Sistem ini mendukung Document Versioning, di mana file lama tidak ditimpa, tapi disimpan sebagai history. Laravel menangani relasi One-to-Many antara tabel documents dan document_versions sehingga user bisa melacak perubahan dokumen dari waktu ke waktu.
+
+## Kesimpulan
+Dengan E-Document, proses pencarian yang tadinya memakan waktu jam-jaman kini selesai dalam hitungan detik. Penggunaan Laravel memberikan fondasi keamanan yang kuat, memastikan dokumen rahasia perusahaan tetap terkunci rapat dan hanya bisa diakses oleh pihak yang berwenang.

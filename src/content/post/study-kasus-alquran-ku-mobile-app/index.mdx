@@ -1,0 +1,105 @@
+---
+title: "Studi Kasus: Alquran-ku Mobile - Aplikasi Ibadah Ringan dengan Flutter & REST API"
+publishDate: "2025-12-15"
+description: "Aplikasi Al-Quran Yang Ringan Dan User Friendly, Terintegrasi Dengan API Santri Coding Publik Untuk Memudahkan Ibadah Harian Pengguna Di Mana Saja."
+img: "/assets/works/alquran.png"
+tags:
+  - Flutter
+  - Api
+  - Mobile Development
+  - Open Source
+featured: false
+---
+
+Di era digital, akses terhadap kitab suci harusnya mudah, cepat, dan bebas gangguan. Namun, banyak aplikasi Al-Quran yang beredar saat ini justru "berat" karena terlalu banyak fitur yang tidak esensial, atau dipenuhi iklan yang mengganggu kekhusyukan.
+
+**Alquran-ku Mobile** lahir dari keresahan tersebut.
+
+Tujuan utamanya sederhana: Membuat aplikasi Al-Quran digital yang **ringan (lightweight)**, antarmuka yang bersih (**clean UI**), dan datanya terjamin valid karena mengambil dari sumber terpercaya.
+
+## The Tech Stack
+
+Untuk mencapai performa yang "sat-set" dan tampilan yang konsisten di Android maupun iOS, saya menggunakan:
+
+* **Flutter (Dart):** Framework utama untuk UI yang smooth (60fps) dan rendering font Arab yang presisi.
+* **Public API (Santri Coding):** Sumber data ayat, terjemahan, dan audio murottal yang sudah terstruktur dalam format JSON.
+* **Google Fonts:** Menggunakan font *Amiri* atau *Scheherazade* untuk memastikan huruf Arab mudah dibaca.
+* **Audioplayers:** Package untuk menangani pemutaran audio murottal per ayat.
+
+## Tantangan 1: Integrasi REST API yang Efisien
+
+Tantangan utama dalam aplikasi Al-Quran adalah menangani data teks yang masif (30 Juz, 114 Surah, 6000+ Ayat). Jika tidak dikelola dengan benar, aplikasi akan terasa lemot saat loading.
+
+### Solusi: Asynchronous Fetching & Clean Model
+Saya tidak menyimpan database ayat di dalam aplikasi (local asset) agar ukuran file `.apk` tetap kecil. Sebaliknya, data diambil secara *real-time* dan *on-demand* menggunakan HTTP Request.
+
+Saya menerapkan pola **Repository Pattern** sederhana untuk memisahkan logic UI dan logic data.
+
+```dart
+// Service untuk mengambil daftar Surah
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
+class QuranService {
+  // Menggunakan API Publik Santri Coding (Contoh Endpoint)
+  final String baseUrl = "[https://content.santricoding.com/api/surah](https://content.santricoding.com/api/surah)";
+
+  Future<List<SurahModel>> getAllSurah() async {
+    try {
+      final response = await http.get(Uri.parse(baseUrl));
+
+      if (response.statusCode == 200) {
+        List data = json.decode(response.body)['data'];
+        return data.map((e) => SurahModel.fromJson(e)).toList();
+      } else {
+        throw Exception('Gagal memuat data Surah');
+      }
+    } catch (e) {
+      throw Exception('Error koneksi: $e');
+    }
+  }
+}
+```
+Dengan cara ini, aplikasi hanya memuat data dftar surat di awal (hanya beberapa KB), dan baru memuat detail ayat ketika user memilih surat tertentu. Ini membuat aplikasi terasa sangat ringan
+
+## Tantangan 2: Rendering Teks Arab (RTL Support)
+Menampilkan teks Arab tidak sama dengan teks Latin. Tantangannya adalah memastikan harakat (tanda baca) tidak bertumpuk dan arah baca benar-benar dari kanan ke kiri (Right-to-Left).
+
+## Solusi: Flutter TextDirection & Styling
+Flutter memiliki dukungan native yang sangat baik untuk ini. Kuncinya ada pada properti textDirection.
+
+```dart
+// Widget untuk menampilkan Ayat
+Container(
+  padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+  child: Column(
+    crossAxisAlignment: CrossAxisAlignment.end, // Rata Kanan
+    children: [
+      Text(
+        ayat.textArab,
+        textAlign: TextAlign.right,
+        textDirection: TextDirection.rtl, // Wajib untuk Arab
+        style: TextStyle(
+          fontFamily: 'Amiri', // Font khusus Arab
+          fontSize: 24,
+          height: 2.0, // Line height agar harakat tidak tabrakan
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      SizedBox(height: 10),
+      Text(
+        ayat.translationId, // Terjemahan Indonesia
+        textAlign: TextAlign.left,
+        style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+      ),
+    ],
+  ),
+);
+```
+## Fitur Unggulan: Audio Murottal
+Selain membaca, pengguna juga bisa mendengarkan lantunan ayat. Data audio ini juga didapatkan dari API yang sama. Saya menambahkan fitur Play/Pause sederhana yang terintegrasi di setiap list ayat, sehingga pengguna bisa belajar pelafalan (tajwid) dengan mendengarkan per ayat secara spesifik.
+
+## Kesimpulan
+**Alquran-ku Mobile** membuktikan bahwa aplikasi ibadah tidak perlu rumit. Dengan memanfaatkan **Flutter** untuk UI yang responsif dan **REST API** untuk manajemen data yang efisien, kita bisa menghadirkan pengalaman ibadah digital yang nyaman, cepat, dan bermanfaat.
+
+Proyek ini juga mengajarkan pentingnya memilih font yang tepat dan penanganan Text Direction dalam pengembangan aplikasi berbasis bahasa Arab.

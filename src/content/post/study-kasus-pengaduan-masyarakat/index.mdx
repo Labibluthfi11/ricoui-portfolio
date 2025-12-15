@@ -1,0 +1,128 @@
+---
+title: "Studi Kasus: Portal Pengaduan Masyarakat - Interaktif & Real-time dengan Livewire"
+publishDate: "2025-12-30"
+description: "Portal Aspirasi Publik Berbasis Web Yang Responsif Dan Interaktif (SPA-like), Dibangun Menggunakan Laravel Livewire Untuk Pengalaman Pengguna Yang Mulus."
+img: "/assets/works/pengaduan.png"
+tags:
+  - Laravel Livewire
+  - Mysql
+  - Fullstack
+  - Public Service
+featured: false
+---
+
+Birokrasi seringkali identik dengan kata "Lambat" dan "Ribet". Warga yang ingin melapor jalan rusak atau tumpukan sampah seringkali malas karena harus datang ke kantor dinas atau mengisi form website kuno yang membingungkan.
+
+Project **Pengaduan Masyarakat (E-Aspirasi)** ini bertujuan memangkas jarak antara warga dan pemerintah.
+
+Tantangannya adalah menciptakan pengalaman pengguna (UX) yang setara dengan aplikasi mobile: **Cepat, Tanpa Reload Page, dan Responsif.** Untuk menjawab itu, saya tidak menggunakan React atau Vue, melainkan solusi *Fullstack* yang powerful: **Laravel Livewire.**
+
+## The Tech Stack
+
+Stack ini dipilih untuk kecepatan *development* tanpa mengorbankan interaktivitas:
+
+* **Laravel Livewire:** Framework *fullstack* yang memungkinkan kita membuat UI dinamis hanya dengan PHP. Tidak perlu pusing mengatur API JSON atau State Management JS yang rumit.
+* **Alpine.js:** "Bumbu" JavaScript ringan untuk animasi kecil (seperti modal atau dropdown) agar UI makin mulus.
+* **MySQL:** Database untuk menyimpan ribuan data laporan, tanggapan, dan log aktivitas.
+
+## Tantangan 1: Single Page Application (SPA) Feel
+
+User zaman sekarang benci *loading* putih saat submit form. Mereka ingin klik "Kirim", dan langsung dapat notifikasi saat itu juga.
+
+### Solusi: Livewire Reactive Components
+Dengan Livewire, validasi form terjadi secara *real-time* saat user mengetik (`wire:model.live`), dan pengiriman data terjadi di *background* via AJAX tanpa refresh halaman.
+
+Berikut contoh komponen Livewire untuk form pengaduan:
+
+```php
+// CreateComplaint.php (Livewire Component)
+
+namespace App\Livewire;
+
+use Livewire\Component;
+use Livewire\WithFileUploads;
+use App\Models\Complaint;
+
+class CreateComplaint extends Component
+{
+    use WithFileUploads;
+
+    public $title;
+    public $description;
+    public $photo;
+
+    // Real-time validation rules
+    protected $rules = [
+        'title' => 'required|min:5',
+        'description' => 'required|min:10',
+        'photo' => 'image|max:1024', // Max 1MB
+    ];
+
+    public function save()
+    {
+        $this->validate();
+
+        // Upload foto & Simpan data
+        $path = $this->photo ? $this->photo->store('complaints', 'public') : null;
+
+        Complaint::create([
+            'user_id' => auth()->id(),
+            'title' => $this->title,
+            'description' => $this->description,
+            'image_path' => $path,
+            'status' => 'pending'
+        ]);
+
+        // Reset form & kirim notifikasi flash tanpa reload
+        $this->reset();
+        session()->flash('message', 'Laporan berhasil dikirim! Petugas akan segera mengecek.');
+    }
+
+    public function render()
+    {
+        return view('livewire.create-complaint');
+    }
+}
+```
+* **Di sisi tampilan (Blade), user merasakan pengalaman yang sangat fluid:**
+```php
+<form wire:submit.prevent="save">
+    <input type="text" wire:model.live="title" placeholder="Judul Laporan...">
+    @error('title') <span class="text-red-500">{{ $message }}</span> @enderror
+    
+    <button type="submit">
+        <span wire:loading.remove>Kirim Laporan</span>
+        <span wire:loading>Mengirim...</span>
+    </button>
+</form>
+```
+## Tantangan 2: Tracking Status Transparan
+Masalah utama pengaduan publik adalah **"Hilang Kabar"**. Warga tidak tahu apakah laporannya dibaca, diproses, atau ditolak.
+
+* **Solusi: Real-time Timeline Log**
+Saya membuat sistem log otomatis. Setiap kali Admin atau Petugas mengubah status laporan (misal: dari Pending ke Proses), sistem mencatat timestamp dan siapa yang mengubahnya.
+
+User bisa melihat history perjalanan laporannya secara transparan.
+```php
+// ComplaintController (Admin Side)
+public function updateStatus(Request $request, Complaint $complaint)
+{
+    // Update status utama
+    $complaint->update(['status' => $request->status]);
+
+    // Catat di tabel history (Audit Trail)
+    ComplaintLog::create([
+        'complaint_id' => $complaint->id,
+        'user_id' => auth()->id(), // Petugas yang memproses
+        'action' => 'Mengubah status menjadi ' . $request->status,
+        'notes' => $request->tanggapan
+    ]);
+    
+    // Trigger notifikasi real-time ke user (bisa via Email/Websocket)
+    // ...
+}
+```
+## Kesimpulan
+Aplikasi **Pengaduan Masyarakat** ini membuktikan bahwa kita tidak selalu membutuhkan framework JavaScript berat (React/Vue) untuk membuat aplikasi yang interaktif.
+
+Dengan **Laravel Livewire**, waktu pengembangan terpangkas hingga 50% karena kita tetap menulis kode dalam PHP (backend), namun hasil akhirnya terasa modern dan responsif seperti aplikasi SPA canggih. Warga senang karena cepat, Pemerintah senang karena efisien.

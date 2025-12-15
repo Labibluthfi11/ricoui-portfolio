@@ -1,0 +1,101 @@
+---
+title: "Studi Kasus: Toko Kita - Ekosistem E-Commerce Terintegrasi (Web & Mobile)"
+publishDate: "2026-02-01"
+description: "Marketplace Multi-Kategori Web (Laravel) Yang Terintegrasi Penuh Deangan Mobile app (Flutter) Untuk Pembelian Belanja Seperti Shopee."
+img: "/assets/works/toko.png"
+tags:
+  - Laravel
+  - Flutter
+  - REST API
+  - E-Commerce
+featured: false
+---
+
+Membangun platform E-Commerce skala besar tidak cukup hanya dengan satu aplikasi. Kita butuh sebuah **Ekosistem**.
+
+Di satu sisi, pemilik toko butuh **Web Dashboard** yang luas untuk memantau stok, upload ribuan produk, dan melihat analitik penjualan. Di sisi lain, pembeli butuh **Mobile App** yang licin ("Sat-set") untuk belanja sambil rebahan, mirip pengalaman menggunakan Uniqlo atau Shopee.
+
+**Toko Kita** hadir menjembatani dua kebutuhan tersebut. Project ini menggabungkan kekuatan manajemen data **Laravel** dengan performa UI **Flutter**.
+
+## The Tech Stack
+
+Arsitektur yang saya gunakan adalah _Client-Server Architecture_ terpisah:
+
+- **Laravel (Backend & Web Admin):** Bertugas sebagai "Pusat Komando". Tempat admin mengelola produk, melihat laporan keuangan, dan menyediakan **REST API**.
+- **Flutter (Mobile App):** Bertugas sebagai "Front Store". Aplikasi Android/iOS untuk user belanja, yang mengonsumsi data dari API Laravel.
+- **MySQL:** Pusat penyimpanan data transaksi dan inventaris yang tersentralisasi.
+
+## Tantangan 1: Sinkronisasi Stok Real-time (API Development)
+
+Masalah utama sistem terpisah adalah: _"Apa yang terjadi jika Admin mengubah harga di Web, tapi User di App masih melihat harga lama?"_
+
+### Solusi: Centralized REST API
+
+Saya membangun API Endpoint di Laravel yang menjadi satu-satunya sumber kebenaran (_Single Source of Truth_). Aplikasi Flutter tidak menyimpan data produk secara permanen, melainkan selalu memanggil data terbaru dari server.
+
+Berikut contoh Controller API di Laravel untuk menyajikan katalog produk ke Mobile App:
+
+```php
+// Api/ProductController.php
+
+public function index(Request $request)
+{
+    // Fitur Filter & Search untuk Mobile App
+    $products = Product::with('category')
+        ->where('is_active', true)
+        ->when($request->search, function($q) use ($request) {
+            $q->where('name', 'like', '%' . $request->search . '%');
+        })
+        ->when($request->category_id, function($q) use ($request) {
+            $q->where('category_id', $request->category_id);
+        })
+        ->paginate(10); // Pagination agar App tidak berat meload ribuan data
+
+    // Return JSON Standard Response
+    return response()->json([
+        'status' => 'success',
+        'data' => $products
+    ]);
+}
+```
+
+## Tantangan 2: User Experience Belanja (Flutter Implementation).
+
+User mengaharapkan pengalaman belanja yang mulus: Scroll lancar, gambar tajam, dan add to cart yang instan
+
+**Solusi: State Management & Lazy Loading
+Di sisi flutter, saya menggunakan teknik **Lazy Loading\*\* (memuat data bertahap saat di-scroll) agar aplikasi tidak lemot meskipun produk ada ribuan.
+
+Saya juga menerapkan logic keranjang belanja yang sinkron
+
+```php
+// ProductService.dart (Flutter)
+
+class ProductService {
+  final String baseUrl = "[https://api.tokokita.com/api/v1](https://api.tokokita.com/api/v1)";
+
+  Future<List<Product>> fetchProducts({int page = 1}) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/products?page=$page')
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      List data = json['data']['data']; // Mengambil array data dari pagination Laravel
+      return data.map((e) => Product.fromJson(e)).toList();
+    } else {
+      throw Exception('Gagal memuat produk');
+    }
+  }
+}
+```
+
+Tampilan produk didesain menggunakan **Grid View** yang responsif, meniru gaya Uniqlo App yang bersih dan fokus pada visual produk.
+
+## Fitur Unggulan:Manajemen Pesanan Terpadu
+
+Salah satu fitur kunci adalah alur pemesanan yang terintegrasi: 1.**User (App):** Checkout -> Order masuk status "pending'. 2.**Admin (Webb):** Mendapat notifikasi di dashboard -> Klik "proses pemesanan" 3.**User (App):** Status order di hp otomatis berubah menjadi "Dikemas" -> "dikirim".
+
+## Kesimpulan
+
+**Toko Kita** membuktikan bahwa kombinasi **Laravel** dan **flutter** adalah pasangan serasi untuk pengembangan E-Commerce modern. Laravel menangani logic bisnis yang berat di belakang layar, sementara flutter memberikan pengalaman visual yang memanjakan mata konsumen di layar HP mereka.

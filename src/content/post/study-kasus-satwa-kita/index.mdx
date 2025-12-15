@@ -1,0 +1,99 @@
+---
+title: "Studi Kasus: Satwa Kita - Platform Manajemen & Adopsi Hewan Terintegrasi"
+publishDate: "2026-01-10"
+description: "Platform Digital untuk Komunitas Pecinta Hewan, Memfasilitasi Informasi Pemeliharaan, Adopsi, Manajement Data Satwa."
+img: "/assets/works/satwa.png"
+tags:
+  - Laravel
+  - Mysql
+  - Community
+  - Social Platform
+featured: false
+---
+
+Memelihara hewan bukan sekadar memberi makan. Ada jadwal vaksin, riwayat penyakit, dan kebutuhan khusus lainnya yang seringkali hanya dicatat di selembar kertas buku vaksin yang mudah hilang.
+
+Di sisi lain, proses **Adopsi Hewan** di media sosial seringkali tidak terstruktur. Banyak kasus penipuan atau hewan jatuh ke tangan *adopter* yang tidak bertanggung jawab karena kurangnya verifikasi.
+
+**Satwa Kita** hadir sebagai ekosistem digital untuk menjawab masalah tersebut. Ini adalah "Kartu Identitas Digital" untuk hewan peliharaan, sekaligus *marketplace* adopsi yang aman.
+
+## The Tech Stack
+
+Membangun platform komunitas membutuhkan struktur database yang rapi dan skalabilitas:
+
+* **Laravel:** Framework utama untuk menangani *Backend Logic*, terutama untuk fitur relasi data yang kompleks (User - Hewan - Riwayat Medis - Adopsi).
+* **MySQL:** Menyimpan data terstruktur dengan relasi yang kuat untuk menjaga integritas data hewan.
+* **Storage Link:** Manajemen penyimpanan foto hewan yang efisien.
+
+## Tantangan 1: Digital Medical Record (Rekam Medis)
+
+Fitur inti aplikasi ini adalah pencatatan kesehatan. Satu hewan bisa memiliki puluhan riwayat medis (Vaksin, Operasi, Cek Rutin).
+
+### Solusi: Eloquent Relationships
+Saya memanfaatkan fitur **Eloquent ORM** di Laravel untuk menghubungkan model `Pet` dengan `MedicalRecord`. Ini memungkinkan pemilik hewan melihat histori kesehatan lengkap dalam satu dashboard.
+
+```php
+// Model Pet.php
+class Pet extends Model
+{
+    // Satu hewan punya banyak catatan medis
+    public function medicalRecords()
+    {
+        return $this->hasMany(MedicalRecord::class)->latest();
+    }
+
+    // Satu hewan punya banyak jadwal pengingat (Vaksin/Obat cacing)
+    public function reminders()
+    {
+        return $this->hasMany(Reminder::class);
+    }
+}
+
+// Controller untuk menampilkan Detail Hewan
+public function show(Pet $pet)
+{
+    // Eager Loading untuk performa (mencegah N+1 Query problem)
+    $pet->load(['medicalRecords', 'reminders']);
+    
+    return view('pets.show', compact('pet'));
+}
+```
+Dengan struktur ini, user bisa dengan mudah melacak: "Kapan terakhir kali kucing saya faksin F3?"tanpa perlu bongkae lemari mencari buku fisik.
+
+## Tantangan 2: Manajemen Alur Adopsi (Adoption Flow)
+Adopsi hewan tidak boleh semudah belanja online "add to Cart". Harus ada proses verifikasi (Screening) untuk memastikan calon pemilik layak.
+
+**Solusi:State Machine Logic**
+Saya membuat logika status berjenjang pada fitur adopsi. Hewan yang sedang dalam proses adopsi akan dikunci (Lock) sehingga tidak bisa diajukan oleh orang lain sampai proses selesai,
+
+**Status Flow:Avaliable -> Requested -> Interview -> Adopted.**
+```php
+// AdoptionController.php
+public function requestAdoption(Request $request, Pet $pet)
+{
+    // 1. Validasi: Apakah hewan masih available?
+    if ($pet->adoption_status !== 'available') {
+        return back()->with('error', 'Maaf, hewan ini sedang dalam proses adopsi oleh orang lain.');
+    }
+
+    // 2. Buat Pengajuan
+    AdoptionRequest::create([
+        'pet_id' => $pet->id,
+        'adopter_id' => auth()->id(),
+        'reason' => $request->reason,
+        'status' => 'pending_review' // Status awal
+    ]);
+
+    // 3. Update status hewan sementara agar tidak didouble-book
+    $pet->update(['adoption_status' => 'on_process']);
+
+    return redirect()->route('adoptions.index')
+        ->with('success', 'Pengajuan adopsi terkirim! Pemilik akan menghubungi Anda.');
+}
+```
+Sistem ini mencegah konflik rebutan hewan dan memberikan ketenangan pikiran bagi rescuer (pemilik awal) untuk menyeleksi calon orang tua asuh baru.
+
+## Kesimpulan 
+**Satwa Kita** bukan sekedar aplikasi database, tapi sebuah alat bantu manajemen kehidupan hewan peliharaan.
+
+Dengan memanfaatkan **Laravel Eloquent,** kompleksitas data medis dan alur adopsi yang ketat dapat ditangani dengan kode yang bersih dan mudah dipelihara (maintainable). Ini membantu komunitas pecinta hewan fokus pada hal yang paling penting: kesejahteraan satwa kesayangan mereka.

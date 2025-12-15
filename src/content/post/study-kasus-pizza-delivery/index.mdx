@@ -1,0 +1,102 @@
+---
+title: "Studi Kasus: Pizza Delivery App - Kompleksitas Menu & Payment Gateway"
+publishDate: "2026-01-05"
+description: "Platform Pemesanan Makanan Spesialis F&B Deangan Fitur Kustomisasi Menu Dan Integrasi Pembayaran Otomatis (Payment Gateway)."
+img: "/assets/works/pizza.png"
+tags:
+  - Laravel
+  - Mysql
+  - Payment Gateway
+  - E-Commerce
+featured: false
+---
+
+Jualan pizza itu unik. Tidak seperti jualan baju yang variannya sederhana (S, M, L), pizza memiliki **logika kustomisasi yang rumit**.
+
+Satu menu "Meat Lovers" bisa memiliki varian ukuran (Personal, Regular, Jumbo), jenis pinggiran (Stuffed Crust, Thin, Sausage), dan tambahan *extra topping* yang harganya beda-beda.
+
+Project **Pizza Delivery App** ini dibangun untuk menangani kompleksitas tersebut, sekaligus menghilangkan proses manual "kirim bukti transfer" dengan integrasi **Payment Gateway**.
+
+## The Tech Stack
+
+Saya memilih stack yang stabil untuk menangani transaksi keuangan dan relasi data yang kompleks:
+
+* **Laravel:** Framework backend dengan ORM (Eloquent) terbaik untuk menangani relasi database yang *njelimet* (Many-to-Many).
+* **MySQL:** Database relasional untuk menjaga integritas data pesanan dan stok bahan.
+* **Midtrans/Xendit (Payment Gateway):** Pihak ketiga untuk memproses pembayaran virtual account, e-wallet, dan kartu kredit secara otomatis.
+
+## Tantangan 1: Logika Kustomisasi Menu (Dynamic Pricing)
+
+Tantangan terberat adalah menghitung harga akhir. Harga bukan statis, tapi:
+`Harga Dasar + Harga Size + Harga Crust + (Harga Topping x Jumlah)`.
+
+### Solusi: Relasi Database & Accessor
+Saya tidak menyimpan harga fix di tabel produk. Saya menggunakan tabel pivot untuk relasi `Product` dengan `Topping` dan `Variant`.
+
+Di Laravel, saya membuat *Accessor* atau *Method* khusus untuk kalkulasi *on-the-fly*.
+
+```php
+// OrderItem.php Model
+
+public function calculateTotal()
+{
+    $basePrice = $this->product->price;
+    
+    // Tambah harga berdasarkan ukuran
+    $sizePrice = $this->size_price; // misal: Jumbo +20rb
+    
+    // Hitung total topping yang dipilih user
+    // Menggunakan relasi Many-to-Many
+    $toppingsTotal = $this->toppings->sum('price');
+
+    return ($basePrice + $sizePrice + $toppingsTotal) * $this->quantity;
+}
+```
+Dengan cara ini, kasir atau sistem tidak perlu menghitung manual. User tinggal klik-klik varian, harga di keranjang belanja otomatis terupdate akurat.
+
+## Tantangan 2: Integrasi Payment Gateway (Callback Handling)
+Masalah klasik bisnis F&B online adalah admin harus cek mutasi rekening manual: "Kak, udah transfer ya, tolong dicek." Ini lambat dan rawan human error.
+
+* **Solusi: Webhook / Callback System**
+Saya mengintegrasikan Payment Gateway (seperti Midtrans). Alurnya:
+
+1. User Checkout -> Dapat link bayar.
+
+2. User Bayar -> Pihak Payment Gateway mengirim sinyal (Webhook) ke server Laravel saya.
+
+3. Laravel memvalidasi sinyal tersebut dan mengupdate status pesanan.
+
+Snippet Callback Controller untuk menangani notifikasi pembayaran:
+```php
+public function callback(Request $request)
+{
+    // 1. Ambil data notifikasi dari Payment Gateway
+    $serverKey = config('midtrans.server_key');
+    $hashed = hash("sha512", $request->order_id . $request->status_code . $request->gross_amount . $serverKey);
+
+    // 2. Validasi Signature Key (Security Check)
+    if ($hashed !== $request->signature_key) {
+        return response()->json(['message' => 'Invalid Signature'], 403);
+    }
+
+    // 3. Update Status Order di Database
+    $order = Order::find($request->order_id);
+
+    if ($request->transaction_status == 'settlement') {
+        $order->update(['status' => 'paid']);
+        // Trigger print struk otomatis di dapur
+        $this->printToKitchen($order);
+    } 
+    else if ($request->transaction_status == 'expire') {
+        $order->update(['status' => 'cancelled']);
+    }
+
+    return response()->json(['message' => 'Callback received']);
+}
+```
+## Kesimpulan
+Aplikasi ini mengubah cara kerja restoran pizza menjadi lebih efisien.
+
+1. Sisi User: Bisa request pizza sesuai selera tanpa bingung soal harga.
+
+2. Sisi Bisnis: Pesanan masuk ke dapur hanya jika pembayaran sudah VALID oleh sistem. Tidak ada lagi drama "bukti transfer palsu" atau pesanan hantu (order tapi gak bayar).
